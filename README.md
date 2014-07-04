@@ -20,10 +20,13 @@ go build
 
 How to use
 ============
-```-cpu``` flag is optional and allows to set the number of OS threads used for multi-threading (default: 2)
+* ```-cpu 2``` flag is optional and allows to set the number of OS threads used for multi-threading (default: 2)
+* ```-delete 1``` flag is optional and makes gonotifyav delete detected threats (default: false)
+* ```-notify http://localhost/path``` flag is optional and makes gonotifyav send an HTTP POST notification about each detected threat (default: no notification)
+* ```-maxsize 10``` flag is optional and makes gonotifyav skip files bigger than given number of MB (default: 10)
 
-At least one argument is required, specify paths to directories to watch.
+At least one positional argument is required, specify paths to directories to watch.
 
 ```bash
-./gonotifyav /home /tmp
+./gonotifyav /home /tmp /dev/shm
 ```

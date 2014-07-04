@@ -5,19 +5,26 @@ import (
 	"code.google.com/p/go.exp/inotify"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
+	"os/user"
 	"runtime"
 	"sync"
+	"syscall"
 )
 
 var (
-	cpus    = flag.Int("cpus", 2, "number of active OS threads")
-	watcher *inotify.Watcher
-	rules   *Rules
+	cpus      = flag.Int("cpus", 2, "number of active OS threads")
+	delete    = flag.Bool("delete", false, "delete detected threats")
+	maxsize   = flag.Int("maxsize", 10, "maximum size in MB of size to be scanned")
+	notifyurl = flag.String("notify", "", "the URL to send a POST notifiction with JSON-encoded info about a threat")
+	watcher   *inotify.Watcher
+	rules     *Rules
 )
 
 const (
@@ -50,9 +57,44 @@ func watchDir(path string) {
 	}
 }
 
+func action(path string) {
+	if *delete {
+		if err := os.Remove(path); err != nil {
+			log.Printf("Could not delete file %s", path)
+		} else {
+			log.Printf("Deleted file %s", path)
+		}
+	}
+}
+
+type notification struct {
+	Path   string
+	Threat string
+	Owner  string
+}
+
+func notify(path, threat, owner string) {
+	if *notifyurl != "" {
+		tmp := notification{Path: path,
+			Threat: threat,
+			Owner:  owner,
+		}
+		body, err := json.Marshal(&tmp)
+		log.Println(string(body))
+		if err != nil {
+			log.Printf("Error encoding JSON notification: %s", err)
+			return
+		}
+		buf := bytes.NewBuffer(body)
+		if _, err := http.Post(*notifyurl, "application/json", buf); err != nil {
+			log.Printf("Error sending notification to %s", notify)
+		}
+	}
+}
+
 func scanner(scan chan string) {
 	for path := range scan {
-		log.Println("I'm starting the scan of ", path)
+		log.Println("Starting the scan of ", path)
 
 		// check file size
 		fi, err := os.Stat(path)
@@ -63,8 +105,17 @@ func scanner(scan chan string) {
 		size := fi.Size()
 		log.Println("File size is ", size)
 
-		if size > 10*1024*1024*1024 {
+		if size > int64((*maxsize)*1024*1024*1024) {
 			break
+		}
+
+		// look up owner's username
+		uid := string(fi.Sys().(*syscall.Stat_t).Uid)
+		var owner string
+		if u, err := user.LookupId(uid); err != nil {
+			owner = uid
+		} else {
+			owner = string(u.Username)
 		}
 
 		// calculate MD5 sum
@@ -77,9 +128,11 @@ func scanner(scan chan string) {
 
 		// search for MD5 hash
 		rules.m.RLock()
+		threat := ""
 		for _, sig := range rules.Signatures {
 			if sig.Format == "MD5" && sig.Sig == sum {
 				log.Printf("Detected a threat in %s by MD5 rule %s from %s", path, sig.Name, sig.Time)
+				threat = sig.Name
 				break
 			} else if sig.Format == "HEX" {
 				bytesig, err := hex.DecodeString(sig.Sig)
@@ -89,12 +142,17 @@ func scanner(scan chan string) {
 				}
 				if bytes.Contains(data, bytesig) {
 					log.Printf("Detected a threat in %s by HEX rule %s from %s", path, sig.Name, sig.Time)
+					threat = sig.Name
 					break
 				}
 			}
 		}
 		rules.m.RUnlock()
-		log.Println("I just finished scanning ", path)
+		if threat != "" {
+			action(path)
+			notify(path, threat, owner)
+		}
+		log.Println("Finished scanning ", path)
 	}
 }
 
