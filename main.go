@@ -110,12 +110,12 @@ func scanner(scan chan string) {
 		}
 
 		// look up owner's username
-		uid := string(fi.Sys().(*syscall.Stat_t).Uid)
+		uid := fmt.Sprintf("%v", fi.Sys().(*syscall.Stat_t).Uid)
 		var owner string
 		if u, err := user.LookupId(uid); err != nil {
 			owner = uid
 		} else {
-			owner = string(u.Username)
+			owner = u.Username
 		}
 
 		// calculate MD5 sum
