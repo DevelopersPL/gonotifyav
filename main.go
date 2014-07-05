@@ -13,18 +13,22 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"syscall"
+	"time"
 )
 
 var (
-	cpus      = flag.Int("cpus", 2, "number of active OS threads")
-	delete    = flag.Bool("delete", false, "delete detected threats")
-	maxsize   = flag.Int("maxsize", 10, "maximum size in MB of size to be scanned")
-	notifyurl = flag.String("notify", "", "the URL to send a POST notifiction with JSON-encoded info about a threat")
-	watcher   *inotify.Watcher
-	rules     *Rules
+	cpus       = flag.Int("cpus", 2, "number of active OS threads")
+	delete     = flag.Bool("delete", false, "delete detected threats")
+	maxsize    = flag.Int("maxsize", 10, "maximum size in MB of size to be scanned")
+	notifyurl  = flag.String("notify", "", "the URL to send a POST notifiction with JSON-encoded info about a threat")
+	quarantine = flag.String("quarantine", "", "the path of quarantine directory to move threats to")
+	watcher    *inotify.Watcher
+	rules      *Rules
 )
 
 const (
@@ -63,6 +67,17 @@ func action(path string) {
 			log.Printf("Could not delete file %s", path)
 		} else {
 			log.Printf("Deleted file %s", path)
+		}
+	} else if *quarantine != "" {
+		dir := *quarantine + "/" + strconv.FormatInt(time.Now().Unix(), 10)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			log.Printf("Could not create directory %s: %s", dir, err)
+			return
+		}
+		moveto := dir + "/" + filepath.Base(path)
+		if err := os.Rename(path, moveto); err != nil {
+			log.Printf("Could not move threat %s to %s: %s", path, moveto, err)
+			return
 		}
 	}
 }

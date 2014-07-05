@@ -20,13 +20,29 @@ go build
 
 How to use
 ============
-* ```-cpu 2``` flag is optional and allows to set the number of OS threads used for multi-threading (default: 2)
-* ```-delete 1``` flag is optional and makes gonotifyav delete detected threats (default: false)
-* ```-notify http://localhost/path``` flag is optional and makes gonotifyav send an HTTP POST notification about each detected threat (default: no notification)
-* ```-maxsize 10``` flag is optional and makes gonotifyav skip files bigger than given number of MB (default: 10)
+Optional flags:
+* ```--cpu 2``` (default: 2) set the number of OS threads used for multi-threading
+* ```--delete 1``` (default: false) delete detected threats
+* ```--maxsize 10``` (default: 10) skip files bigger than given number of MB
+* ```--notify http://localhost/path``` (default: none) send an HTTP POST notification about each detected threat
+* ```--quarantine /var/quarantine``` (default: none) move threats to this directory
+
+You can only choose one of ```delete``` or ```quarantine```. Deletion takes precedence.
 
 At least one positional argument is required, specify paths to directories to watch.
 
 ```bash
 ./gonotifyav /home /tmp /dev/shm
 ```
+
+Notification body format
+============
+```json
+{"Path":"/tmp/c99.txt","Threat":"web.malware.unclassed.155","Owner":"root"}
+```
+
+Quarantine
+============
+* Quarantine directory will be created if it doesn't exist.
+* Files will be moved into subdirectories with the name of Unix timestamp
+* Files moved there will not have their permissions altered so make sure that regular users don't have access to it.
